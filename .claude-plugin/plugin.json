@@ -1,0 +1,9 @@
+{
+  "name": "verifiable-agent-gym",
+  "version": "0.1.0",
+  "description": "Executable research tasks, tool environments, and independent verification. Includes evidence synthesis, virtual instruments, and optical design.",
+  "author": {"name": "Verifiable Agent Gym contributors"},
+  "homepage": "https://github.com/Cherish0925/Verifiable-Agent-Gym",
+  "repository": "https://github.com/Cherish0925/Verifiable-Agent-Gym",
+  "license": "MIT"
+}

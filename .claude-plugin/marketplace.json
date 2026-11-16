@@ -1,0 +1,11 @@
+{
+  "name": "verifiable-agent-gym",
+  "owner": {"name": "Verifiable Agent Gym contributors"},
+  "plugins": [
+    {
+      "name": "verifiable-agent-gym",
+      "source": "./",
+      "description": "A model-neutral research Gym with executable tasks and independent verifiers."
+    }
+  ]
+}

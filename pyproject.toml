@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "verifiable-agent-gym"
+version = "0.1.0"
+description = "Executable tasks and independent verification for tool-using agents"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {file = "LICENSE"}
+authors = [{name = "Verifiable Agent Gym contributors"}]
+keywords = ["agents", "reinforcement-learning", "research", "mcp", "evaluation"]
+dependencies = []
+
+[project.optional-dependencies]
+mcp = ["mcp>=1.29,<2"]
+
+[project.scripts]
+agent-gym = "agent_gym.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.urls]
+Repository = "https://github.com/Cherish0925/Verifiable-Agent-Gym"

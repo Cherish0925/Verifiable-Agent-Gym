@@ -1,0 +1,17 @@
+{
+  "name": "verifiable-agent-gym",
+  "version": "0.1.0",
+  "description": "Executable research tasks, tool environments, and independent verification.",
+  "author": {"name": "Verifiable Agent Gym contributors"},
+  "homepage": "https://github.com/Cherish0925/Verifiable-Agent-Gym",
+  "repository": "https://github.com/Cherish0925/Verifiable-Agent-Gym",
+  "license": "MIT",
+  "skills": "./skills/",
+  "mcpServers": "./mcp.codex.json",
+  "requires_local_executor": true,
+  "interface": {
+    "displayName": "Verifiable Agent Gym",
+    "shortDescription": "Run research tasks with tools and independent verification",
+    "developerName": "Verifiable Agent Gym contributors"
+  }
+}
