@@ -9,6 +9,7 @@ import queue
 import signal
 import subprocess
 import threading
+import time
 from typing import Any
 
 from .storage import dumps
@@ -26,20 +27,39 @@ class CommandAgent:
             raise ValueError("command must be a nonempty argv list")
         workspace.mkdir(parents=True, exist_ok=True)
         self.stderr = (workspace / "agent.stderr.log").open("w", encoding="utf-8")
+        environment = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUTF8="1")
         try:
             self.process = subprocess.Popen(
                 command, cwd=workspace, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.stderr,
                 text=True, encoding="utf-8", errors="strict", bufsize=1, shell=False,
                 start_new_session=os.name != "nt",
                 creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,
+                env=environment,
             )
         except Exception:
             self.stderr.close()
             raise
         self.messages: queue.Queue[Any] = queue.Queue(maxsize=1)
+        self.outgoing: queue.Queue[Any] = queue.Queue(maxsize=1)
         self.closed = threading.Event()
         self.reader = threading.Thread(target=self._read, daemon=True)
+        self.writer = threading.Thread(target=self._write, daemon=True)
         self.reader.start()
+        self.writer.start()
+
+    def _write(self):
+        while not self.closed.is_set():
+            try:
+                line, completed = self.outgoing.get(timeout=0.1)
+            except queue.Empty:
+                continue
+            try:
+                self.process.stdin.write(line)
+                self.process.stdin.flush()
+            except Exception as exc:
+                completed.put(exc)
+            else:
+                completed.put(None)
 
     def _read(self):
         try:
@@ -67,11 +87,15 @@ class CommandAgent:
     def act(self, observation, *, timeout=30):
         if self.closed.is_set():
             raise RuntimeError("Agent process is closed")
-        self.process.stdin.write(dumps(observation) + "\n")
-        self.process.stdin.flush()
+        deadline = time.monotonic() + timeout
+        completed = queue.Queue(maxsize=1)
         try:
-            response = self.messages.get(timeout=timeout)
-        except queue.Empty as exc:
+            self.outgoing.put((dumps(observation) + "\n", completed), timeout=timeout)
+            error = completed.get(timeout=max(0, deadline - time.monotonic()))
+            if error is not None:
+                raise error
+            response = self.messages.get(timeout=max(0, deadline - time.monotonic()))
+        except (queue.Empty, queue.Full) as exc:
             self.close()
             raise TimeoutError("Agent response deadline exceeded") from exc
         if isinstance(response, Exception):
@@ -108,6 +132,7 @@ class CommandAgent:
             process.kill()
         process.wait(timeout=5)
         self.reader.join(timeout=1)
+        self.writer.join(timeout=1)
         process.stdin.close()
         process.stdout.close()
         self.stderr.close()

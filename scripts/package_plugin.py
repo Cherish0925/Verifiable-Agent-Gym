@@ -12,8 +12,8 @@ from agent_gym import __version__
 def main():
     destination = ROOT / "dist"
     destination.mkdir(exist_ok=True)
-    entries = ["src", "skills", "docs", "examples", ".claude-plugin", ".codex-plugin", ".mcp.json",
-               "mcp.codex.json", "server.py", "pyproject.toml", "README.md", "README.zh-CN.md", "LICENSE"]
+    entries = ["src", "skills", "docs", "examples", ".agents", ".claude-plugin", ".codex-plugin", ".mcp.json",
+               "plugin.json", "mcp.json", "mcp.codex.json", "server.py", "pyproject.toml", "README.md", "README.zh-CN.md", "LICENSE"]
     plugin = destination / f"verifiable-agent-gym-{__version__}-plugin.zip"
     with zipfile.ZipFile(plugin, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for entry in entries:

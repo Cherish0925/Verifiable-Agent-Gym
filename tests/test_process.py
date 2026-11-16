@@ -34,6 +34,13 @@ class ProcessTests(unittest.TestCase):
         with self.assertRaises(json.JSONDecodeError):
             agent.act({}, timeout=5)
 
+    def test_unread_large_observation_obeys_deadline(self):
+        agent = CommandAgent([sys.executable, "-c", "import time; time.sleep(30)"], self.root)
+        self.addCleanup(agent.close)
+        with self.assertRaises(TimeoutError):
+            agent.act({"document": "x" * 1_000_000}, timeout=0.1)
+        self.assertIsNotNone(agent.process.poll())
+
     def test_unicode_and_space_in_paths(self):
         agent = CommandAgent([sys.executable, "-c", "import json,sys; x=json.loads(sys.stdin.readline()); print(json.dumps({'submit':x}),flush=True)"], self.root / "研究 workspace")
         self.addCleanup(agent.close)

@@ -3,7 +3,8 @@ name: Execution and distribution
 on:
   push:
     branches: [main]
-    tags: ['v*']
+  release:
+    types: [published]
   pull_request:
   workflow_dispatch:
 
@@ -26,23 +27,24 @@ jobs:
             python: '3.12'
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
-      - run: python -m pip install --upgrade pip setuptools wheel
+      - run: python -m pip install --upgrade pip setuptools wheel uv
       - run: python -m pip install -e ".[mcp]"
       - run: python -m unittest discover -s tests -v
       - run: python -m pip wheel . --no-deps --wheel-dir dist
       - run: python scripts/package_plugin.py
       - run: python scripts/check_install.py
+      - run: python scripts/check_plugin_mcp.py
       - uses: actions/upload-artifact@v4
         with:
           name: gym-${{ matrix.os }}-py${{ matrix.python }}
           path: dist/
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'release'
     needs: exercise
     runs-on: ubuntu-latest
     permissions:
@@ -55,4 +57,5 @@ jobs:
       - name: Publish release assets
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$RELEASE_TAG" dist/* --repo "$GITHUB_REPOSITORY"

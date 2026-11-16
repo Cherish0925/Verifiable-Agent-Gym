@@ -46,7 +46,14 @@ For local development, start Claude Code with `--plugin-dir /absolute/path/to/Ve
 
 ### Codex
 
-Install the repository/extracted plugin through the plugin installation facility in a Codex version supporting `.codex-plugin/plugin.json`. The manifest points to `mcp.codex.json`. Its `cwd: "."` resolves at the plugin root and runs `server.py` there; it does not assume Codex expands Claude's root variable.
+Add this repository's catalog and install the plugin:
+
+```sh
+codex plugin marketplace add Cherish0925/Verifiable-Agent-Gym
+codex plugin add verifiable-agent-gym@verifiable-agent-gym
+```
+
+The catalog is `.agents/plugins/marketplace.json`. The package supplies a portable root `plugin.json` and `mcp.json` with a stdio transport and plugin-relative working directory. A `.codex-plugin/plugin.json` overlay and `mcp.codex.json` retain compatibility with hosts using that layout. Neither Codex configuration assumes it expands Claude's root variable.
 
 If your Codex version does not expose plugin installation, use the generated MCP configuration through its normal MCP settings and copy `skills/verifiable-agent-gym/` into its Skill directory. MCP integration does not require native plugin support.
 
@@ -54,7 +61,7 @@ If your Codex version does not expose plugin installation, use the generated MCP
 
 Use the package's generated command/arguments with any compatible MCP stdio client. A host can expose `gym_action` directly or translate each episode's `tools` list into native function calls. Its action must still pass through the Gym so observations and rewards are recorded consistently. No provider-specific API is embedded in the Gym.
 
-The manifests are shipping formats, not automatic listings in an external vendor's curated store. Marketplace acceptance and host-specific UI installation remain separate from protocol compatibility.
+The root portable manifest targets [Agent Plugins 1.0.0](https://agent-plugins.org/). These manifests are shipping formats, not automatic listings in an external vendor's curated store. Marketplace acceptance and host-specific UI installation remain separate from protocol compatibility.
 
 ## Distribution
 
