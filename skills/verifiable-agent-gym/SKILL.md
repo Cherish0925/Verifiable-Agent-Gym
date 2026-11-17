@@ -1,6 +1,6 @@
 ---
 name: verifiable-agent-gym
-description: Run tool-using research tasks with independent verification, evaluate an agent across reproducible task instances, or develop a task/environment/verifier package. Use for Verifiable Agent Gym, virtual instrument identification, evidence aggregation, optical design exercises, and verified trajectory generation.
+description: Run reproducible agent tasks, load data-backed environments, collect grouped training rollouts, or develop task/environment/verifier packages. Use for Verifiable Agent Gym, SQL task populations, scientific environments, agent evaluation and trajectory generation.
 ---
 
 # Verifiable Agent Gym
@@ -26,10 +26,18 @@ agent-gym export runs/baseline --output runs/baseline.jsonl
 
 The default `reference` agent is a transparent scripted baseline, not an LLM. To evaluate a model, use an external JSONL agent process with `--agent command --command-json '["/absolute/path/to/python", "/absolute/path/to/agent.py"]'`, or drive episodes directly through MCP. The process reads one observation per line and emits one action per line; diagnostics go to stderr. Use explicit executable paths on Windows as well as Unix.
 
-Continue the same batch with `--resume`. Add `--retry-errors` only when deliberately retrying infrastructure errors. Completed scored attempts are retained, not overwritten. For a benchmark, keep the verifier and reference implementation outside the evaluated agent's available tools and context; the published source is for development, not hidden-test secrecy.
+Continue the same batch with `--resume`; use `--retry-errors` to retry infrastructure errors. Completed scored attempts are retained. The evaluated agent receives the task's observations and tools.
+
+## Collect trainer-driven experience
+
+Load finite SQL populations with `load_taskpack`, inspect `pack.describe()`, and obtain valid specifications with `pack.specs(split)`. For MCP hosts, use `agent-gym --task-pack FAMILY=PATH connect --output CONFIG`. Seeds select finite record indexes; choose from the loaded population.
+
+Create a `TaskSuite` with attempts per task and taskpack metadata. Its rank-aware sampler keeps each task's attempts together and checkpoints issuance order. `RolloutBatch` owns independent slots; drive `reset` and `step` with partial mappings, refill completed slots, and pass a concrete `PolicyVersion`. Record actual model statistics with `policy_data` when available.
+
+Export with `agent-gym export-rollouts RUN --output FILE`. Preserve task, source, group, policy and outcome identities when importing into Data Engineering. Read the repository's `docs/training.md` and run `examples/batched_rollouts.py` for the complete interface.
 
 ## Extend the Gym
 
 Keep the task factory, observable tool environment, and independent verifier separate. A factory accepts `TaskSpec` and returns a `Task`; installed packages register factories through the `agent_gym.tasks` entry-point group. A solver self-report is not a verifier. State units and conventions, build a feasible task instance, and compare submitted artifacts against evidence or an independent calculation.
 
-Reuse existing software and data through task packages; do not duplicate solver runtimes in the Gym core. Dataset licenses, external executables, and model credentials belong to their respective integrations. See the repository's [task-package guide](https://github.com/Cherish0925/Verifiable-Agent-Gym/blob/main/docs/task-packages.md) and [protocol](https://github.com/Cherish0925/Verifiable-Agent-Gym/blob/main/docs/protocol.md) for contracts and a complete extension example.
+Reuse existing software and data through task packages. See the repository's [task-package guide](https://github.com/Cherish0925/Verifiable-Agent-Gym/blob/main/docs/task-packages.md) and [protocol](https://github.com/Cherish0925/Verifiable-Agent-Gym/blob/main/docs/protocol.md) for contracts and complete extension examples.

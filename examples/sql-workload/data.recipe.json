@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "name": "relational-workload",
+  "sources": [
+    {
+      "connector": "jsonl",
+      "path": "tasks.jsonl"
+    }
+  ],
+  "use": "analyze",
+  "seed": "relational-v1",
+  "splits": {
+    "train": 0.8,
+    "validation": 0.1,
+    "test": 0.1
+  }
+}

@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "verifiable-agent-gym",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Executable research tasks, tool environments, and independent verification for agents.",
   "author": {"name": "Verifiable Agent Gym contributors"},
   "homepage": "https://github.com/Cherish0925/Verifiable-Agent-Gym",

@@ -20,15 +20,17 @@ def default_output() -> Path:
 def parser():
     result = argparse.ArgumentParser(prog="agent-gym", description="Executable tasks and independent verification for tool-using agents")
     result.add_argument("--version", action="version", version=__version__)
+    result.add_argument("--task-pack", action="append", default=[], metavar="FAMILY=PATH",
+                        help="load a data-backed SQL task pack before running a command")
     sub = result.add_subparsers(dest="operation", required=True)
     sub.add_parser("list", help="List installed task families")
     for name in ("run", "generate"):
         command = sub.add_parser(name)
         command.add_argument("--tasks", nargs="+", default=["all"])
-        command.add_argument("--count", type=int, default=10, help="Instances per family")
-        command.add_argument("--seed", type=int, default=0)
+        command.add_argument("--count", type=int, help="Instances per family; defaults to 10 generated or all matching pack records")
+        command.add_argument("--seed", type=int, default=0, help="First generator seed or finite-pack record index")
         command.add_argument("--split", choices=("train", "validation", "test"), default="train")
-        command.add_argument("--difficulty", type=int, choices=(1, 2, 3), default=1)
+        command.add_argument("--difficulty", type=int, choices=(1, 2, 3), help="Generated difficulty (default 1), or pack record filter")
         command.add_argument("--output", type=Path, required=True)
         if name == "run":
             command.add_argument("--agent", choices=("reference", "empty", "command"), default="reference")
@@ -48,6 +50,13 @@ def parser():
     command.add_argument("run", type=Path)
     command.add_argument("--output", type=Path, required=True)
     command.add_argument("--include-unscored", action="store_true")
+    command = sub.add_parser("export-rollouts", help="Export batched trainer episodes with group and policy identity")
+    command.add_argument("run", type=Path)
+    command.add_argument("--output", type=Path, required=True)
+    command.add_argument("--scored-only", action="store_true")
+    command = sub.add_parser("pack-info", help="Inspect a data-backed SQL task pack")
+    command.add_argument("path", type=Path)
+    command.add_argument("--family", default="sql-dataset")
     command = sub.add_parser("connect", help="Write MCP or Research OS configuration for this installed interpreter")
     command.add_argument("--host", choices=("mcp", "research-os"), default="mcp")
     command.add_argument("--output", type=Path, required=True)
@@ -60,16 +69,40 @@ def main(argv=None):
             stream.reconfigure(encoding="utf-8")
     args = parser().parse_args(argv)
     try:
+        pack_arguments = []
+        packs = {}
+        if args.task_pack:
+            from .taskpacks import load_taskpack
+            for entry in args.task_pack:
+                if "=" not in entry:
+                    raise ValueError("--task-pack expects FAMILY=PATH")
+                family, raw_path = entry.split("=", 1)
+                path = Path(raw_path).resolve(strict=True)
+                packs[family] = load_taskpack(path, family=family).register()
+                pack_arguments.extend(["--task-pack", f"{family}={path}"])
         if args.operation == "list":
             print("\n".join(task_names()))
         elif args.operation in ("run", "generate"):
-            if args.count < 1:
+            if args.count is not None and args.count < 1:
                 raise ValueError("count must be positive")
+            if args.seed < 0:
+                raise ValueError("seed must be nonnegative")
             families = task_names() if args.tasks == ["all"] else args.tasks
             unknown = set(families) - set(task_names())
             if unknown:
                 raise ValueError(f"Unknown tasks: {', '.join(sorted(unknown))}")
-            specs = [TaskSpec(family, args.seed + index, args.split, args.difficulty) for family in families for index in range(args.count)]
+            specs = []
+            for family in families:
+                if family in packs:
+                    available = [spec for spec in packs[family].specs(args.split)
+                                 if spec.seed >= args.seed and
+                                 (args.difficulty is None or spec.difficulty == args.difficulty)]
+                    if not available or (args.count is not None and args.count > len(available)):
+                        raise ValueError(f"{family}: requested selection exceeds the {len(available)} matching pack records")
+                    specs.extend(available if args.count is None else available[:args.count])
+                else:
+                    specs.extend(TaskSpec(family, args.seed + index, args.split, args.difficulty or 1)
+                                 for index in range(args.count or 10))
             if args.operation == "generate":
                 args.output.parent.mkdir(parents=True, exist_ok=True)
                 with args.output.open("x", encoding="utf-8", newline="\n") as stream:
@@ -115,11 +148,18 @@ def main(argv=None):
             from .export import export_run
             count = export_run(args.run, args.output, include_unscored=args.include_unscored)
             print(f"Exported {count} episodes: {args.output}")
+        elif args.operation == "export-rollouts":
+            from .rollout import export_rollouts
+            count = export_rollouts(args.run, args.output, include_unscored=not args.scored_only)
+            print(f"Exported {count} episodes: {args.output}")
+        elif args.operation == "pack-info":
+            from .taskpacks import load_taskpack
+            print(json.dumps(load_taskpack(args.path, family=args.family).describe(), ensure_ascii=False, indent=2))
         elif args.operation == "connect":
             from importlib.util import find_spec
             if find_spec("mcp") is None:
                 raise RuntimeError('Install MCP support first: python -m pip install ".[mcp]"')
-            server = {"command": sys.executable, "args": ["-m", "agent_gym", "mcp"]}
+            server = {"command": sys.executable, "args": ["-m", "agent_gym", *pack_arguments, "mcp"]}
             if args.host == "research-os":
                 server["transport"] = "stdio"
                 value = {"name": "verifiable-agent-gym", "version": __version__, "description": "Executable tasks and independent verification", "mcpServers": {"agent-gym": server}}

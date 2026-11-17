@@ -1,7 +1,7 @@
 {
   "name": "verifiable-agent-gym",
-  "version": "0.1.0",
-  "description": "Executable research tasks, tool environments, and independent verification. Includes evidence synthesis, virtual instruments, and optical design.",
+  "version": "0.2.0",
+  "description": "Data-backed task environments, grouped rollouts and independent outcome feedback for learning agents.",
   "author": {"name": "Verifiable Agent Gym contributors"},
   "homepage": "https://github.com/Cherish0925/Verifiable-Agent-Gym",
   "repository": "https://github.com/Cherish0925/Verifiable-Agent-Gym",
