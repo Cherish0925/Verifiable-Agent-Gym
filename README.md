@@ -1,16 +1,16 @@
 # Verifiable Agent Gym
 
-**Executable research tasks, tool environments, and independent verification for agents.**
+**Task distributions, executable environments and observed feedback for learning agents.**
 
-[中文](README.zh-CN.md) · [Install in an agent host](docs/install.md) · [Protocol](docs/protocol.md) · [Build a task package](docs/task-packages.md)
+[中文](README.zh-CN.md) · [Training interface](docs/training.md) · [Protocol](docs/protocol.md) · [Task packages](docs/task-packages.md) · [Agent installation](docs/install.md)
 
-An agent should learn from what it actually does. This Gym gives it a task, tools that act on an environment, and a verifier that evaluates the submitted result. The same core works through Python, a command-line runner, JSON lines, or MCP. It does not require a particular model, cloud account, or agent framework.
+An agent receives a task, acts through environment tools and submits a result for independent evaluation. This project makes that experience reusable across policies: task suites define what to attempt, batched slots execute the interactions, and exports retain the attempts and outcomes that an external learner consumes.
 
-The project is public and MIT-licensed. Use it as a standalone evaluation environment, install it as an agent plugin, or contribute domain-specific task packages. It is not an LLM provider, a replacement research OS, or an RL optimizer.
+The model-neutral core serves evaluation, synthetic experience collection, post-training and scientific experimentation. [Data Engineering](https://github.com/Cherish0925/Data-Engineering) supplies versioned task and trajectory products; Gym supplies executable environments; the trainer owns policy inference and optimization. [Public frontier workloads](https://github.com/Cherish0925/Data-Engineering/blob/main/docs/frontier-workloads.md) motivate this division.
 
-## Run it
+## Run an evaluation or collect grouped rollouts
 
-Python 3.11 or newer. Core tasks use only the standard library; MCP is an optional extra.
+Python 3.11 or newer. The core uses the standard library and is MIT-licensed.
 
 ```sh
 git clone https://github.com/Cherish0925/Verifiable-Agent-Gym.git
@@ -19,86 +19,99 @@ python -m pip install -e .
 agent-gym list
 agent-gym run --tasks all --count 10 --difficulty 3 --jobs 4 --output runs/baseline --require-pass
 agent-gym export runs/baseline --output runs/baseline.jsonl
+python examples/batched_rollouts.py --output runs/grouped
 ```
 
-On a system without a `python` command, use `python3` on macOS/Linux or `py -3.11` on Windows. `python -m agent_gym` also works wherever the console entry point is not on PATH. No Bash, WSL, Rust compiler, or model API key is required.
+The evaluation command and grouped example use a scripted reference policy. The grouped example collects four attempts for each of four RC identification tasks through four episode slots, then writes `runs/grouped/trajectories.jsonl`. Replace its action-generation step with your model's batched inference. The `empty` policy provides an unsuccessful comparison for the evaluation runner.
 
-The default agent is a **scripted reference policy**, not an LLM. It solves through the same observations and tools exposed to other agents. An `empty` policy supplies a negative control. To evaluate your model, connect it through MCP or an external JSONL process.
+`python -m agent_gym` is equivalent to `agent-gym`. Use `python3` or `py -3.11` where appropriate.
 
-## Use it from an agent
+## Task suites and the learner interface
+
+| Object | Responsibility |
+| --- | --- |
+| `TaskSuite` | Finite, versioned task definitions and attempts per task; a content-derived suite identity. |
+| `SuiteSampler` | Deterministic task ordering, epoch and sample seeds, whole-task group assignment across ranks and a restorable issuance cursor. |
+| `PolicyVersion` | Policy name, revision and generation settings attached to each attempt. |
+| `RolloutBatch` | Concurrent environment slots with selective `reset`, `step` and `close_slots`; completed slots can be refilled independently. |
+| Rollout export | Task, group, attempt and policy identities; ordered interactions, supplied policy-side statistics, terminal status and verifier results. |
+
+```python
+from agent_gym import TaskSpec
+from agent_gym.suite import TaskSuite
+
+suite = TaskSuite(
+    [TaskSpec("rc-identification", seed=i) for i in range(100)],
+    attempts_per_task=4,
+    name="rc-policy-comparison",
+)
+sampler = suite.sampler(seed=17, rank=0, world_size=4)
+tickets = sampler.take(8)
+checkpoint = sampler.state_dict()
+```
+
+All attempts for one sampled task group stay on the same rank. A batch returns `terminated`, `truncated`, `scored`, `reward` and the observation for each stepped slot. Policy-provided token statistics can accompany actions; the trainer uses those statistics to construct its loss. The sampler checkpoint restores which tickets are issued next. [Training integration](docs/training.md) defines the complete loop and the boundary between sampling state and live environment state.
+
+```sh
+agent-gym export-rollouts runs/grouped --output runs/grouped-export.jsonl
+```
+
+## Dataset-backed tasks
+
+A task pack makes a dataset executable. The SQL profile accepts a database snapshot, an instruction and a reference query or result. The agent inspects the schema, queries the database and submits SQL or rows. The verifier compares results with explicit row-order and numerical-tolerance semantics, accepting alternative queries with the same result.
+
+```sh
+agent-gym pack-info examples/sql-workload/tasks.jsonl --family warehouse-sql
+agent-gym --task-pack warehouse-sql=examples/sql-workload/tasks.jsonl list
+python examples/sql-workload/agent.py --output runs/sql-example
+```
+
+The example contains four authored relational questions with fixed train/validation/test assignments. `load_taskpack` accepts their JSONL file or a Data Engineering release, preserves source identities and returns the finite task specifications in each split. After installing Data Engineering, the same records can be prepared and loaded as a release:
+
+```sh
+ai-data build examples/sql-workload/data.recipe.json --output runs/sql-tasks
+agent-gym pack-info runs/sql-tasks --family warehouse-sql
+```
+
+Use `pack.specs("train")` to construct a `TaskSuite` and `pack.make` as the batch's task factory. [Task package documentation](docs/task-packages.md) covers custom providers; [the calibration package](examples/calibration-package/) demonstrates the `agent_gym.tasks` entry point.
+
+Data Engineering's [experience-cycle example](https://github.com/Cherish0925/Data-Engineering/blob/main/examples/experience_cycle.py) runs the complete path: task release, eight grouped SQL attempts, trajectory release, training shards and resumable rank reads.
+
+## Generated scientific environments
+
+| Family | Agent's work | Evaluation |
+| --- | --- | --- |
+| `evidence-aggregation` | Select eligible document revisions, convert units and combine measurements. | Evidence membership, inverse-variance estimate and standard error. |
+| `rc-identification` | Choose frequencies, measure a noisy instrument and identify its parameters. | Parameter error and response at held-out frequencies, calculated independently. |
+| `thin-film-design` | Choose materials and thicknesses for an antireflection coating. | A characteristic-matrix calculation checks the band-averaged target. |
+
+These families generate repeatable instances with three difficulties and separate split seed namespaces. SQL packs instead enumerate dataset records. Transfer experiments can hold out task mechanisms, domains or compositions in addition to instances.
+
+## Connect an agent
 
 ```sh
 python -m pip install -e ".[mcp]"
 agent-gym connect --output agent-gym.mcp.json
 ```
 
-Import that configuration into a compatible MCP host. The generated command uses the exact Python interpreter where the Gym was installed. For Codex and Claude Code, this repository also includes native plugin manifests and a shared [Skill](skills/verifiable-agent-gym/SKILL.md). [Installation details](docs/install.md) include Research OS configuration and plugin launch requirements.
+A compatible MCP host uses `gym_tasks`, `gym_open`, `gym_action` and `gym_close`. Codex and Claude Code plugin manifests and a shared [Skill](skills/verifiable-agent-gym/SKILL.md) are included; see [installation](docs/install.md).
 
-Four MCP tools cover the lifecycle:
-
-| Tool | Operation |
-| --- | --- |
-| `gym_tasks` | Discover installed task families. |
-| `gym_open` | Create an episode with a specified seed, split, and difficulty. |
-| `gym_action` | Call an environment tool or submit the final result. |
-| `gym_close` | Close an unfinished episode. |
-
-For example, open `rc-identification`, call `instrument_info` and `measure_response` through `gym_action`, then submit the fitted gain and cutoff. Each episode owns its state. Several episodes may run concurrently without mixing measurements or outputs.
-
-## Included task families
-
-These are generated, executable reference environments—not a claim to cover all of science.
-
-| Family | Agent's work | Independent acceptance test |
-| --- | --- | --- |
-| `evidence-aggregation` | Read a synthetic document library, choose current eligible revisions, convert units, combine measurements. | Exact evidence selection and inverse-variance estimate, calculated from the generated source records. |
-| `rc-identification` | Choose measurement frequencies and identify a noisy virtual instrument. | Parameter errors and complex-response error at held-out frequencies, using a separate analytical expression. |
-| `thin-film-design` | Explore available materials and film thicknesses for an antireflection coating. | A characteristic-matrix calculation checks a band-averaged target; any qualifying design is accepted. |
-
-Every family supports deterministic seeds, three difficulties, and separate train/validation/test seed namespaces. The optical generator constructs a feasible design before issuing a task. Measurement noise has its own reproducible random stream.
-
-## Evaluation that remains interpretable
-
-- **A wrong answer is not a broken environment.** Verified submissions become `passed` or `failed`, with a reward. Infrastructure errors, time/action exhaustion, and cancellation remain unscored and visible in the summary.
-- **Evidence survives the process.** Every attempt records its task, ordered observations/actions, terminal result, and numerical verifier metrics. Export emits observed trajectories and rewards, not fabricated reasoning or token probabilities.
-- **Resume does not rewrite history.** `--resume` skips finished attempts. Interrupted attempts restart in fresh environments; `--retry-errors` explicitly retries infrastructure failures. Old attempts remain available.
-- **Concurrency has an owner.** The batch runner admits at most `--jobs` episodes at once. External agents get separate subprocesses and working directories; one episode's actions remain ordered.
-
-For external agents, pass an executable and arguments, not a shell string:
+An external process can read JSON observations from stdin and write JSON actions to stdout:
 
 ```sh
 agent-gym run --tasks rc-identification --count 20 --agent command --command-json '["/absolute/path/to/python", "/absolute/path/to/my_agent.py"]' --jobs 4 --output runs/model
 ```
 
-The external process reads one JSON observation from stdin and returns one JSON action on stdout. [Protocol examples and Python usage](docs/protocol.md) show the complete exchange.
+The [protocol](docs/protocol.md) defines this exchange. Evaluation runs retain every attempt; `--resume` skips completed attempts and starts interrupted work in a fresh environment. `--retry-errors` retries recorded infrastructure failures. Verified answers have rewards; interruption, truncation and environment failures retain their status and an unscored reward.
 
-## Grow through task packages
+## Current execution scope
 
-Datasets, knowledge bases, simulators, and laboratory software should extend the environment rather than become mandatory core dependencies. A package registers task factories in the `agent_gym.tasks` entry-point group. Each factory provides:
-
-1. A task specification and observable instructions.
-2. An executable environment with typed tools and per-episode state.
-3. A verifier that checks results against evidence, physical constraints, reference calculations, or executable tests.
-
-[The complete calibration example](examples/calibration-package/) is independently installable and demonstrates this extension point. The same contract can wrap an existing solver or remote instrument client. Skills explain how to work; MCP carries calls; plugins package discovery and installation. None replaces the environment or verifier.
-
-## Scope and next work
-
-The current runner is local and single-machine. Built-in environments are lightweight; external agent processes have response deadlines. In-process task providers must bound their own long-running tool calls. This is execution ownership, **not an OS sandbox** for untrusted code.
-
-Public task generators and reference policies are useful for development, not secret benchmark answers. Seed splits do not establish semantic out-of-distribution generalization. Open-ended research without a defensible verifier must not be relabeled as verified success.
-
-Next integration work is concrete: task packages for IOP/optical solvers, durable remote jobs, and trainer-specific rollout adapters. Those are not represented as working connectors in this release. The JSONL export is a foundation for training data; tokenization, policy log probabilities, and optimization remain the trainer's responsibility.
-
-## Develop
+Execution is local: batch slots run environment calls in threads, and the command runner owns external agent processes. Long-running task providers manage their own solver jobs. Live environment restoration, remote workers and framework-specific training adapters remain integration work. Tokenization, model probabilities and optimization belong to the external learner. The included fixtures and policies exercise these interfaces; model-learning and large-workload results require consumer experiments.
 
 ```sh
-python -m pip install -e ".[mcp]"
 python -m unittest discover -s tests -v
 python -m pip wheel . --no-deps --wheel-dir dist
 python scripts/package_plugin.py
 ```
 
-CI runs the episode, subprocess, MCP, and installation paths on Linux, Windows, and macOS. Contributions should add a working capability or resolve a demonstrated failure. For a task package, include a feasible example, a wrong-answer case, explicit units/assumptions, and a verifier independent of the agent's self-report. Keep optional software optional.
-
-Conceptual references: [NVIDIA NeMo Gym](https://github.com/NVIDIA-NeMo/Gym), [Gymnasium's environment interface](https://gymnasium.farama.org/api/env/), and [Model Context Protocol](https://modelcontextprotocol.io/). This project is independent of them and does not claim API compatibility with Gymnasium or a specific RL trainer.
+Read [AGENTS.md](AGENTS.md) before contributing. A useful addition supplies a working environment, an interoperable learner adapter or a research result that changes how tasks are constructed and sampled.

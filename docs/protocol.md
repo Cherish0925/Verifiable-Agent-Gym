@@ -42,15 +42,15 @@ The first observation has `type: "start"`, task identity, instructions, tools, a
 | `error` | Setup, environment, verifier, agent transport, or cleanup failed. | `null` |
 | `cancelled` | Caller or service stopped the episode. | `null` |
 
-The included tasks use binary rewards. Custom tasks may return graded rewards alongside an explicit pass/fail criterion. Summaries report both success among scored attempts and success among all attempted episodes; failures to run therefore remain visible.
+The scientific reference tasks use binary rewards; SQL tasks use matched-row F1 and pass on the complete expected result. Custom tasks define their reward and pass criterion. Summaries report success among scored attempts and among all attempted episodes.
 
-Budgets include the final submission. A bad tool call consumes an action. In-process callbacks are cooperative: the runner checks episode deadlines between calls; long-running adapters must implement bounded execution themselves. External JSONL agents have a response timeout and an owned process group. The runner is not a container or VM boundary.
+Budgets include the final submission. A bad tool call consumes an action. The runner checks episode deadlines between calls; long-running adapters implement their own operation deadlines. External JSONL agents have a response timeout and an owned process group.
 
 ## External agent process
 
 `--agent command` starts one process per episode in its own workspace, with explicit argv and UTF-8 pipes. It writes one observation per line to stdin. Return exactly one action per line on stdout, keeping logs on stderr. The process is closed after the terminal action. `python -m agent_gym.reference` is an executable protocol example, not a model integration.
 
-Model SDK calls, credentials, conversation history, and native tool-schema translation belong in your agent adapter. Do not expose the server's source, verifier, or reference implementation as tools to an agent during a controlled evaluation. For stronger isolation, run the client and server on separate workers or within the isolation provided by your harness.
+Model SDK calls, conversation history and native tool-schema translation belong in the agent adapter. The evaluation interface supplies observations and tools; reference solutions stay with the task implementation.
 
 ## JSONL service
 
@@ -68,4 +68,4 @@ Each attempt has a generated episode ID under `<output>/<task-id>/<episode-id>/`
 
 Only one batch writer may use an output directory at a time. The OS releases that lease if the process crashes. `--resume` requires the same Gym version, specifications, agent configuration, and limits. Incomplete attempts restart in new environments: this is **batch continuation**, not restoration of an arbitrary solver's in-memory state.
 
-Exports stream one episode per JSONL record and retain observations, actions, verification metrics, and reward. Unscored attempts are excluded from training export by default, with `--include-unscored` available for analysis. No model-internal reasoning, log probabilities, or imaginary interaction records are synthesized.
+`export` streams one episode per JSONL record with observations, actions, metrics and reward; use `--include-unscored` to include attempts without a score. For trainer-driven batches, [TaskSuite and RolloutBatch](training.md) preserve task groups, policy revisions and supplied model statistics. Their `export-rollouts` command includes unscored episodes by default, with `--scored-only` available for selection.

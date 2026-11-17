@@ -19,6 +19,14 @@ The actual service command is:
 python -m agent_gym mcp
 ```
 
+For a data-backed task population, generate a configuration that loads it:
+
+```sh
+agent-gym --task-pack warehouse-sql=/absolute/path/tasks.jsonl connect --output warehouse.mcp.json
+```
+
+The generated command keeps the pack's absolute path. See [task packages](task-packages.md) for data profiles and [training](training.md) for Python batched rollouts.
+
 The host starts a stdio subprocess. No HTTP address, port, browser, or model key is needed. To set the output directory or concurrent episode capacity, append `--output /path/to/runs --max-active 16`. The default storage location is `~/.agent-gym/runs`; `AGENT_GYM_RUNS` overrides it. Paths are arguments, not shell fragments.
 
 For Research OS's plugin configuration format:

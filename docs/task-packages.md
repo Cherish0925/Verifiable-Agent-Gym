@@ -1,5 +1,49 @@
 # Task packages
 
+A domain can supply task records or a Python task factory. Records are useful when many instances share one environment profile; factories add new environment behavior.
+
+## Data-backed SQL tasks
+
+```sh
+agent-gym pack-info examples/sql-workload/tasks.jsonl --family warehouse-sql
+agent-gym --task-pack warehouse-sql=examples/sql-workload/tasks.jsonl list
+agent-gym --task-pack warehouse-sql=examples/sql-workload/tasks.jsonl mcp
+```
+
+`--task-pack` is a global option placed before the subcommand. `connect` retains its absolute path in the generated host configuration. Each pack is a finite population: seeds select sorted record IDs within a split. `generate` and `run` select all matching records by default; `--seed` chooses the starting index, `--difficulty` filters records and `--count` limits the selection. Generated task families keep the defaults of 10 instances at difficulty 1. In Python, `pack.specs(split)` returns valid specifications with their recorded difficulties.
+
+```python
+from agent_gym.taskpacks import load_taskpack
+
+pack = load_taskpack("task-release", family="warehouse-sql")
+specs = pack.specs("train")
+task = pack.make(specs[0])
+```
+
+The loader accepts canonical record JSONL, task JSONL, or a Data Engineering source-release directory. A canonical task record has `kind: "task"`, source identity, a fixed split, and this payload:
+
+```json
+{
+  "profile": "sql/v1",
+  "instruction": "Return each department and its total budget, ordered by department.",
+  "database": {
+    "ddl": ["CREATE TABLE projects (department TEXT, budget REAL)"],
+    "tables": {"projects": {"columns": ["department", "budget"], "rows": [["optics", 12], ["optics", 8], ["software", 5]]}}
+  },
+  "verifier": {"sql": "SELECT department, SUM(budget) FROM projects GROUP BY department ORDER BY department", "ordered": true},
+  "difficulty": 1,
+  "max_actions": 32
+}
+```
+
+The database can instead be `{"path":"warehouse.sqlite","sha256":"<file-hash>"}`, resolved against the pack's asset root. A verifier can supply expected `rows` instead of reference `sql`; it also supports `columns`, `atol` and `rtol`.
+
+Each episode has a database snapshot and exposes `database_schema` and `query`. Submit `{"submit":{"sql":"..."}}` or result `rows`. Equivalent SQL is accepted by comparing results, preserving duplicate multiplicity and optional ordering. Reward is matched-row F1; a complete match passes. Reference queries and results remain outside observations. Dataset IDs, source revisions and pack/release hashes are retained in the task's `data_reference`.
+
+The four authored [SQL examples](../examples/sql-workload/) exercise joins, grouping, subqueries and held-out queries on one database. Run `python examples/sql-workload/agent.py --output runs/sql-example` for a multi-step policy, or use the [training interface](training.md) for repeated grouped attempts.
+
+## Python task factories
+
 A task package is an ordinary Python distribution. It can contain datasets and knowledge resources or wrap existing databases, simulators, MCP services, and remote jobs. The Gym does not need to install every solver to discover a package's task names.
 
 Register a factory in the package's `pyproject.toml`:
@@ -26,9 +70,9 @@ A task revision identifies changes to generation, observation, or acceptance sem
 
 For IOP, an optical solver, or a database, a task adapter should translate Gym tools into the existing system's calls. It should preserve returned artifact paths, physical metadata, and job IDs. The verifier reads actual resulting artifacts or repeats an independent calculation. Closing the episode must release only resources owned by that episode.
 
-Remote jobs need submission, bounded polling, result retrieval, and cancellation semantics in the adapter. The current core does not restore arbitrary remote jobs after a server restart. Do not claim remote continuation until a task package implements and demonstrates it.
+Remote adapters own job submission, polling, result retrieval, cancellation and any continuation state.
 
-Package optional software, data locations, and license requirements with the task package. Large datasets can stay in external storage with explicit dataset revisions; do not place credentials, proprietary datasets, or solver binaries into the core distribution. Installing a package is not a license to redistribute all of its inputs.
+Declare optional software and data locations with the task package. Keep large datasets in external storage with explicit revisions.
 
 ## Contribution scope
 
