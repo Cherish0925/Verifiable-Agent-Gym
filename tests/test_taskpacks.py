@@ -1,4 +1,5 @@
 import hashlib
+from contextlib import closing
 from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
@@ -97,14 +98,16 @@ class SQLTaskTests(unittest.TestCase):
 
     def test_sqlite_file_snapshot_and_hash(self):
         file = self.root / "database.sqlite"
-        with sqlite3.connect(file) as db:
+        with closing(sqlite3.connect(file)) as db:
             db.execute("CREATE TABLE observed (x INTEGER)")
             db.executemany("INSERT INTO observed VALUES (?)", [(3,), (4,)])
+            db.commit()
         payload = small_payload(sql="SELECT SUM(x) FROM observed")
         payload["database"] = {"path": file.name, "sha256": hashlib.sha256(file.read_bytes()).hexdigest()}
         task = self.task(payload)
-        with sqlite3.connect(file) as db:
+        with closing(sqlite3.connect(file)) as db:
             db.execute("INSERT INTO observed VALUES (999)")
+            db.commit()
         self.assertTrue(task.verify({"sql": "SELECT SUM(x) FROM observed"}).passed)
         self.assertTrue(task.verify({"rows": [[7]]}).passed)
         with self.assertRaisesRegex(ValueError, "hash mismatch"):
