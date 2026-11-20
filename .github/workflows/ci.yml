@@ -34,7 +34,7 @@ jobs:
       - run: python -m pip install --upgrade pip setuptools wheel uv
       - run: python -m pip install -e ".[mcp]"
       - run: python -m unittest discover -s tests -v
-      - run: python examples/collect_policy.py
+      - run: python examples/collect_policy.py --output runs/collection-example
       - run: python -m pip wheel . --no-deps --wheel-dir dist
       - run: python scripts/package_plugin.py
       - run: python scripts/check_install.py
